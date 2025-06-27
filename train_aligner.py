@@ -14,7 +14,8 @@ from omegaconf import OmegaConf
 
 
 from repos.stylematte.stylematte.models import StyleMatte
-from src.data import Voxceleb2H5Dataset, CustomBatchSampler
+from torchvision.datasets import ImageFolder
+from torch.utils.data import DataLoader
 from src.utils.logging import LogPredictionSamplesCallback, PeriodicCheckpoint
 from src.utils.preprocess import make_X_dict, blend_alpha
 from src.losses import *
@@ -325,9 +326,8 @@ class AlignerModule(pl.LightningModule):
 
 
 def create_dataset(cfg, train_transform=None, flip_transform=None, cross=False):
-    dataset = Voxceleb2H5Dataset(root_path=cfg.data_path, source_len=cfg.source_len, transform=train_transform, flip_transform=flip_transform, shuffle=cfg.shuffle, cross=cross)
-    sampler = CustomBatchSampler(dataset)
-    dataloader = DataLoader(dataset, batch_size=cfg.batch_size, sampler=sampler, num_workers=cfg.num_workers)
+    dataset = ImageFolder(root=cfg.data_path, transform=train_transform)
+    dataloader = DataLoader(dataset, batch_size=cfg.batch_size, shuffle=cfg.shuffle, num_workers=cfg.num_workers)
     return dataloader
     
 

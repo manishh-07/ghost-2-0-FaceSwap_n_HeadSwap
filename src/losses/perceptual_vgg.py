@@ -21,8 +21,7 @@ class PerceptualLoss(nn.Module):
             num_layers = 30
 
         elif net == 'caffe':
-            vgg_weights = torch.load(os.path.join(vgg_weights_dir, 'vgg19-d01eb7cb.pth'))
-
+            vgg_weights = torch.load(os.path.join(vgg_weights_dir, 'vgg19-d01eb7cb.pth'), weights_only=False)
             map = {'classifier.6.weight': u'classifier.7.weight', 'classifier.6.bias': u'classifier.7.bias'}
             vgg_weights = OrderedDict([(map[k] if k in map else k, v) for k, v in vgg_weights.items()])
 

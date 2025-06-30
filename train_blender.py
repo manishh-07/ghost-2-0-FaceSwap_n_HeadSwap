@@ -156,14 +156,32 @@ class BlenderModule(pl.LightningModule):
         opt_G = torch.optim.Adam(self.gen.parameters(), lr=self.g_lr, betas=self.betas, eps=1e-5)
         opt_D = torch.optim.Adam(self.disc.parameters(), lr=self.d_lr, betas=self.betas, eps=1e-5)
         return opt_G, opt_D
+    
+    def on_train_epoch_start(self):
+        print(f"\n=== Starting training epoch {self.current_epoch} ===")
+
+    def on_train_epoch_end(self):
+        print(f"=== Finished training epoch {self.current_epoch} ===")
+
+    def on_validation_epoch_start(self):
+        print(f"\n=== Starting validation epoch {self.current_epoch} (validation) ===")
+
+    def on_validation_epoch_end(self):
+        print(f"=== Finished validation epoch {self.current_epoch} (validation) ===")
+        super().on_validation_epoch_end()
 
     def training_step(self, train_batch, batch_idx):
+        print(f"[TRAIN] Epoch {self.current_epoch} Batch {batch_idx} starting...")
+
         opt_G, opt_D = self.optimizers()
         
         forward_dict = self.forward_train(train_batch)
         
         losses = self.blender_loss(forward_dict, train_batch)
         
+        print(f"[TRAIN] Epoch {self.current_epoch} Batch {batch_idx} losses: " +
+              ", ".join(f"{k}: {v.item():.4f}" for k, v in losses.items() if hasattr(v, 'item')))
+
         def closure_G():
             opt_G.zero_grad()
             self.manual_backward(losses['L_G'], retain_graph=True)
@@ -184,8 +202,12 @@ class BlenderModule(pl.LightningModule):
         return logs
 
     def validation_step(self, val_batch, batch_idx, old_version=True, copy_source_attrb=False):
+        print(f"[VAL] Epoch {self.current_epoch} Batch {batch_idx} starting...")
         with torch.no_grad():
-            return dict(self.forward(val_batch, old_version=old_version, copy_source_attrb=copy_source_attrb), **val_batch)
+            outputs = self.forward(val_batch, old_version=old_version, copy_source_attrb=copy_source_attrb)
+        print(f"[VAL] Epoch {self.current_epoch} Batch {batch_idx} outputs: " +
+              ", ".join(f"{k}: {v.shape if hasattr(v, 'shape') else type(v)}" for k, v in outputs.items()))
+        return dict(outputs, **val_batch)
 
 
 class BlenderLogPredictionSamplesCallback(pl.Callback):
@@ -280,7 +302,8 @@ def create_dataset(cfg, source_transform=None):
         flip_target=cfg.flip_target,
         affine_source=cfg.affine_source,
         make_noise=cfg.make_noise,
-        subset_size=cfg.subset_size
+        subset_size=cfg.subset_size,
+        swap_mode=getattr(cfg, 'swap_mode', 'both')  # <-- add this if supported
     )
     sampler = CustomBatchSampler(train_dataset)
     dataloader = DataLoader(train_dataset, batch_size=cfg.batch_size, sampler=sampler, num_workers=cfg.num_workers)
@@ -294,10 +317,8 @@ if __name__ == '__main__':
     with open(args.config, "r") as stream:
         cfg = OmegaConf.load(stream)
 
-    if not hasattr(cfg.train_options, 'swap_mode'):
-        cfg.train_options.swap_mode = 'both'
-    if not hasattr(cfg.inference_options, 'swap_mode'):
-        cfg.inference_options.swap_mode = 'both'
+    cfg.train_options.swap_mode = 'both'
+    cfg.inference_options.swap_mode = 'both'
     
     model = BlenderModule(
         cfg

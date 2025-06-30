@@ -14,7 +14,6 @@ from omegaconf import OmegaConf
 
 from src.data.voxceleb import Voxceleb2H5Dataset
 from src.data.blender_dataset import BlenderDataset
-from src.data.faceswap_dataset import FaceSwapDataset
 from src.utils.crops import *
 from repos.stylematte.stylematte.models import StyleMatte
 from torch.utils.data import DataLoader
@@ -210,6 +209,15 @@ class AlignerModule(pl.LightningModule):
         batch['face_wide_mask'] = mask
         
         return batch
+    
+    def on_train_epoch_start(self):
+        print(f"\n=== Starting training epoch {self.current_epoch} ===")
+
+    def on_train_epoch_end(self):
+        print(f"=== Finished training epoch {self.current_epoch} ===")
+
+    def on_validation_epoch_start(self):
+        print(f"\n=== Starting validation epoch {self.current_epoch} (validation) ===")
 
     def training_step(self, train_batch, batch_idx):
 
@@ -222,12 +230,17 @@ class AlignerModule(pl.LightningModule):
             segmentation=train_batch['segmentation'],
             swap_mode=self.swap_mode
         )
+
+        print(f"[TRAIN] Epoch {self.current_epoch} Batch {batch_idx} starting...")
         
         opt_G, opt_D = self.optimizers()
         
         data_dict = self.forward(X_dict, use_geometric_augmentations=True)
 
         losses = self.aligner_loss(data_dict, X_dict, epoch=self.current_epoch)
+
+        print(f"[TRAIN] Epoch {self.current_epoch} Batch {batch_idx} losses: " +
+          ", ".join(f"{k}: {v.item():.4f}" for k, v in losses.items() if hasattr(v, 'item')))
         
         def closure_G():
             opt_G.zero_grad()
@@ -250,6 +263,8 @@ class AlignerModule(pl.LightningModule):
 
     def validation_step(self, val_batch, batch_idx, dataloader_idx):
 
+        print(f"[VAL] Epoch {self.current_epoch} Batch {batch_idx} (dataloader {dataloader_idx}) starting...")
+
         X_dict = make_X_dict(
             val_batch['face_arc'],
             val_batch['face_wide'],
@@ -264,20 +279,24 @@ class AlignerModule(pl.LightningModule):
         
         
         if dataloader_idx == 0:
+            print(f"[VAL] Epoch {self.current_epoch} Batch {batch_idx} (dataloader {dataloader_idx}) metrics: {metrics}")
+
             masked_output = blend_alpha(outputs['fake_rgbs'], X_dict['target']['face_wide_mask'])
             
             lpips_val = self.lpips(masked_output,  X_dict['target']['face_wide'])
             psnr_val = self.psnr(masked_output,  X_dict['target']['face_wide'])
             ssim_val = self.ssim(masked_output,  X_dict['target']['face_wide'])
             # Upsample to 160x160 for MS-SSIM
-            def upsample_to_160(img):
-                if img.shape[-1] < 160 or img.shape[-2] < 160:
-                    img = F.interpolate(img, size=(160, 160), mode='bilinear', align_corners=False)
+            def upsample_to_161(img):
+                if img.shape[-1] < 161 or img.shape[-2] < 161:
+                    img = F.interpolate(img, size=(161, 161), mode='bilinear', align_corners=False)
                 return img
+
             mssim_val = self.mssim(
-                upsample_to_160(masked_output),
-                upsample_to_160(X_dict['target']['face_wide'])
+                upsample_to_161(masked_output),
+                upsample_to_161(X_dict['target']['face_wide'])
             )
+            # ..
             id_dict = self.aligner_loss.id_loss(outputs, X_dict, return_embeds=True)
             id_metric = F.cosine_similarity(id_dict['fake_embeds'], id_dict['real_embeds']).mean()
 
@@ -288,6 +307,8 @@ class AlignerModule(pl.LightningModule):
                            'ID self': id_metric}
             
         if dataloader_idx == 1:
+            print(f"[VAL] Epoch {self.current_epoch} Batch {batch_idx} (dataloader {dataloader_idx}) metrics: {metrics}")
+
             id_dict = self.aligner_loss.id_loss(outputs, X_dict, return_embeds=True)
             id_score = F.cosine_similarity(id_dict['fake_embeds'], id_dict['real_embeds']).mean()
             metrics = {'ID cross': id_score}
@@ -328,9 +349,13 @@ class AlignerModule(pl.LightningModule):
             
         for key, val in losses_cross.items():
             self.log(key, np.mean(val), sync_dist=True)
+        
+        print(f"=== Finished validation epoch {self.current_epoch} (validation) ===")
+        super().on_validation_epoch_end()
 
         self.val_outputs[0].clear()
         self.val_outputs[1].clear()
+
         
 
 

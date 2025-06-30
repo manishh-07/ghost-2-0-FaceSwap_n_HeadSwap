@@ -22,7 +22,18 @@ import src.utils.kornia_morphology
 from src.data import BlenderDataset
 from src.blender.generator import BlenderGenerator
 from src.losses import ReferenceRegularizationLoss
+import logging
+import sys
 
+# Set up logging to file and console
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s %(levelname)s %(message)s',
+    handlers=[
+        logging.FileHandler("aligner_train.log"),
+        logging.StreamHandler(sys.stdout)
+    ]
+)
 
 
 class BlenderLoss(nn.Module):
@@ -158,20 +169,20 @@ class BlenderModule(pl.LightningModule):
         return opt_G, opt_D
     
     def on_train_epoch_start(self):
-        print(f"\n=== Starting training epoch {self.current_epoch} ===")
+        logging.info(f"\n=== Starting training epoch {self.current_epoch} ===")
 
     def on_train_epoch_end(self):
-        print(f"=== Finished training epoch {self.current_epoch} ===")
+        logging.info(f"=== Finished training epoch {self.current_epoch} ===")
 
     def on_validation_epoch_start(self):
-        print(f"\n=== Starting validation epoch {self.current_epoch} (validation) ===")
+        logging.info(f"\n=== Starting validation epoch {self.current_epoch} (validation) ===")
 
     def on_validation_epoch_end(self):
-        print(f"=== Finished validation epoch {self.current_epoch} (validation) ===")
+        logging.info(f"=== Finished validation epoch {self.current_epoch} (validation) ===")
         super().on_validation_epoch_end()
 
     def training_step(self, train_batch, batch_idx):
-        print(f"[TRAIN] Epoch {self.current_epoch} Batch {batch_idx} starting...")
+        logging.info(f"[TRAIN] Epoch {self.current_epoch} Batch {batch_idx} starting...")
 
         opt_G, opt_D = self.optimizers()
         
@@ -179,7 +190,7 @@ class BlenderModule(pl.LightningModule):
         
         losses = self.blender_loss(forward_dict, train_batch)
         
-        print(f"[TRAIN] Epoch {self.current_epoch} Batch {batch_idx} losses: " +
+        logging.info(f"[TRAIN] Epoch {self.current_epoch} Batch {batch_idx} losses: " +
               ", ".join(f"{k}: {v.item():.4f}" for k, v in losses.items() if hasattr(v, 'item')))
 
         def closure_G():
@@ -202,10 +213,10 @@ class BlenderModule(pl.LightningModule):
         return logs
 
     def validation_step(self, val_batch, batch_idx, old_version=True, copy_source_attrb=False):
-        print(f"[VAL] Epoch {self.current_epoch} Batch {batch_idx} starting...")
+        logging.info(f"[VAL] Epoch {self.current_epoch} Batch {batch_idx} starting...")
         with torch.no_grad():
             outputs = self.forward(val_batch, old_version=old_version, copy_source_attrb=copy_source_attrb)
-        print(f"[VAL] Epoch {self.current_epoch} Batch {batch_idx} outputs: " +
+        logging.info(f"[VAL] Epoch {self.current_epoch} Batch {batch_idx} outputs: " +
               ", ".join(f"{k}: {v.shape if hasattr(v, 'shape') else type(v)}" for k, v in outputs.items()))
         return dict(outputs, **val_batch)
 

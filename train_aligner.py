@@ -21,6 +21,18 @@ from src.utils.logging import LogPredictionSamplesCallback, PeriodicCheckpoint
 from src.utils.preprocess import make_X_dict, blend_alpha
 from src.losses import *
 from src.aligner import *
+import logging
+import sys
+
+# Set up logging to file and console
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s %(levelname)s %(message)s',
+    handlers=[
+        logging.FileHandler("aligner_train.log"),
+        logging.StreamHandler(sys.stdout)
+    ]
+)
 
     
 class AlignerLoss(nn.Module):
@@ -88,12 +100,12 @@ class AlignerLoss(nn.Module):
                 L_gaze = self.gaze(masked_fake[:, [2, 1, 0], :, :], masked_target[:, [2, 1, 0], :, :],
                                                             X_dict['target']['keypoints'])
                 if L_gaze.shape != torch.Size([]):
-                    print('gaze_loss returned list: ', L_gaze)
+                    logging.info('gaze_loss returned list: ', L_gaze)
                     L_gaze = L_adv_G * 0
                     
             except Exception as e:
-                print(e)
-                print('error in gaze')
+                logging.info(e)
+                logging.info('error in gaze')
                 L_gaze = L_adv_G * 0
 
 
@@ -211,13 +223,13 @@ class AlignerModule(pl.LightningModule):
         return batch
     
     def on_train_epoch_start(self):
-        print(f"\n=== Starting training epoch {self.current_epoch} ===")
+        logging.info(f"\n=== Starting training epoch {self.current_epoch} ===")
 
     def on_train_epoch_end(self):
-        print(f"=== Finished training epoch {self.current_epoch} ===")
+        logging.info(f"=== Finished training epoch {self.current_epoch} ===")
 
     def on_validation_epoch_start(self):
-        print(f"\n=== Starting validation epoch {self.current_epoch} (validation) ===")
+        logging.info(f"\n=== Starting validation epoch {self.current_epoch} (validation) ===")
 
     def training_step(self, train_batch, batch_idx):
 
@@ -231,7 +243,7 @@ class AlignerModule(pl.LightningModule):
             swap_mode=self.swap_mode
         )
 
-        print(f"[TRAIN] Epoch {self.current_epoch} Batch {batch_idx} starting...")
+        logging.info(f"[TRAIN] Epoch {self.current_epoch} Batch {batch_idx} starting...")
         
         opt_G, opt_D = self.optimizers()
         
@@ -239,7 +251,7 @@ class AlignerModule(pl.LightningModule):
 
         losses = self.aligner_loss(data_dict, X_dict, epoch=self.current_epoch)
 
-        print(f"[TRAIN] Epoch {self.current_epoch} Batch {batch_idx} losses: " +
+        logging.info(f"[TRAIN] Epoch {self.current_epoch} Batch {batch_idx} losses: " +
           ", ".join(f"{k}: {v.item():.4f}" for k, v in losses.items() if hasattr(v, 'item')))
         
         def closure_G():
@@ -263,8 +275,6 @@ class AlignerModule(pl.LightningModule):
 
     def validation_step(self, val_batch, batch_idx, dataloader_idx):
 
-        print(f"[VAL] Epoch {self.current_epoch} Batch {batch_idx} (dataloader {dataloader_idx}) starting...")
-
         X_dict = make_X_dict(
             val_batch['face_arc'],
             val_batch['face_wide'],
@@ -279,7 +289,6 @@ class AlignerModule(pl.LightningModule):
         
         
         if dataloader_idx == 0:
-            print(f"[VAL] Epoch {self.current_epoch} Batch {batch_idx} (dataloader {dataloader_idx}) metrics: {metrics}")
 
             masked_output = blend_alpha(outputs['fake_rgbs'], X_dict['target']['face_wide_mask'])
             
@@ -306,8 +315,10 @@ class AlignerModule(pl.LightningModule):
                            'MS_SSIM': mssim_val,
                            'ID self': id_metric}
             
+            logging.info(f"[VAL] Epoch {self.current_epoch} Batch {batch_idx} (dataloader {dataloader_idx}) metrics: {metrics}")
+
+            
         if dataloader_idx == 1:
-            print(f"[VAL] Epoch {self.current_epoch} Batch {batch_idx} (dataloader {dataloader_idx}) metrics: {metrics}")
 
             id_dict = self.aligner_loss.id_loss(outputs, X_dict, return_embeds=True)
             id_score = F.cosine_similarity(id_dict['fake_embeds'], id_dict['real_embeds']).mean()
@@ -317,6 +328,8 @@ class AlignerModule(pl.LightningModule):
                      'fake_segm': outputs['fake_segm'],
                      'metrics': metrics}
         
+        logging.info(f"[VAL] Epoch {self.current_epoch} Batch {batch_idx} (dataloader {dataloader_idx}) metrics: {metrics}")
+
         if dataloader_idx == 0:
             self.val_outputs[0].append(out_dict)
         else:
@@ -350,7 +363,7 @@ class AlignerModule(pl.LightningModule):
         for key, val in losses_cross.items():
             self.log(key, np.mean(val), sync_dist=True)
         
-        print(f"=== Finished validation epoch {self.current_epoch} (validation) ===")
+        logging.info(f"=== Finished validation epoch {self.current_epoch} (validation) ===")
         super().on_validation_epoch_end()
 
         self.val_outputs[0].clear()

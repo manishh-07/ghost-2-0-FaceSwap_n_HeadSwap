@@ -12,9 +12,11 @@ from torchvision.transforms import ToTensor
 from lightning.pytorch.loggers import TensorBoardLogger
 from omegaconf import OmegaConf
 
-
+from src.data.voxceleb import Voxceleb2H5Dataset
+from src.data.blender_dataset import BlenderDataset
+from src.data.faceswap_dataset import FaceSwapDataset
+from src.utils.crops import *
 from repos.stylematte.stylematte.models import StyleMatte
-from torchvision.datasets import ImageFolder
 from torch.utils.data import DataLoader
 from src.utils.logging import LogPredictionSamplesCallback, PeriodicCheckpoint
 from src.utils.preprocess import make_X_dict, blend_alpha
@@ -326,7 +328,17 @@ class AlignerModule(pl.LightningModule):
 
 
 def create_dataset(cfg, train_transform=None, flip_transform=None, cross=False):
-    dataset = ImageFolder(root=cfg.data_path, transform=train_transform)
+    dataset = Voxceleb2H5Dataset(
+        root_path=cfg.data_path,
+        source_len=getattr(cfg, 'source_len', 1),
+        samples_cnt=getattr(cfg, 'samples_cnt', None),
+        shuffle=getattr(cfg, 'shuffle', False),
+        transform=train_transform,
+        subset_size=getattr(cfg, 'subset_size', None),
+        flip_transform=getattr(cfg, 'flip_transform', False),
+        return_masks=True,
+        cross=cross
+    )
     dataloader = DataLoader(dataset, batch_size=cfg.batch_size, shuffle=cfg.shuffle, num_workers=cfg.num_workers)
     return dataloader
     
@@ -346,9 +358,10 @@ if __name__ == '__main__':
     model = AlignerModule(cfg)
 
     train_transform = torchvision.transforms.Compose([
-        torchvision.transforms.ToTensor(),
-        torchvision.transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-    ])
+    torchvision.transforms.Resize((112, 112)),
+    torchvision.transforms.ToTensor(),
+    torchvision.transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+])
 
     train_dataloader = create_dataset(cfg.train_options, train_transform=train_transform, flip_transform=True, cross=False)
     val_dataloader_self = create_dataset(cfg.inference_options, cross=False)

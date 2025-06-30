@@ -4,7 +4,7 @@ experiment_name: 'test_run'
 num_gpus: 1
         
 train_options:
-    data_path: '/content/ghost-2-0-FaceSwap_n_HeadSwap/src/data/train'
+    data_path: '/content/ghost-2-0-FaceSwap_n_HeadSwap/src/data/train_h5'
     weights:
         w_perc_vgg: 0.01
         w_rec: 1
@@ -42,7 +42,7 @@ train_options:
 
         
 inference_options:
-    data_path: '/content/ghost-2-0-FaceSwap_n_HeadSwap/src/data/test'
+    data_path: '/content/ghost-2-0-FaceSwap_n_HeadSwap/src/data/test_h5'
 
     shuffle: True
     flip_target: False

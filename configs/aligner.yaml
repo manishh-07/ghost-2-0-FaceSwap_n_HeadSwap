@@ -33,7 +33,7 @@ model:
         
 train_options:
     # data_path: '/home/jovyan/yaschenko/dev_masks_parsings/train'
-    data_path: '/content/ghost-2-0-FaceSwap_n_HeadSwap/src/data/train'
+    data_path: '/content/ghost-2-0-FaceSwap_n_HeadSwap/src/data/train_h5'
     weights:
         w_rec: 30
         w_perc_vgg: 0.0001
@@ -61,7 +61,7 @@ train_options:
     log_train_freq: 200
     batch_size: 10
     swap_mode: both
-    samples_cnt: None
+    samples_cnt: null
     source_len: 1
     shuffle: True
     num_workers: 40
@@ -69,9 +69,9 @@ train_options:
         
 inference_options:
     # data_path: '/home/jovyan/yaschenko/dev_masks_parsings/test'
-    data_path: '/content/ghost-2-0-FaceSwap_n_HeadSwap/src/data/test'
+    data_path: '/content/ghost-2-0-FaceSwap_n_HeadSwap/src/data/test_h5'
     batch_size: 20
-    samples_cnt: None
+    samples_cnt: nulll
     source_len: 1
     shuffle: False
     swap_mode: both

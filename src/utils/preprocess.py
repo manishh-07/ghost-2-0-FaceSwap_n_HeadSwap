@@ -1,6 +1,9 @@
 import torch
 import numpy as np
 from skimage import transform as trans
+import torch.nn.functional as F
+
+# ye side ka baki hai solution implement krna ,, given by copilot
 
 def calc_arcface_borders(image_size=512):
     src3 = np.array([[39.730, 51.138], [72.270, 51.138], [56.000, 68.493],
@@ -26,10 +29,24 @@ def calc_arcface_borders(image_size=512):
 
 
 def blend_alpha(img, mask, background=None):
-    
+    # Ensure all inputs are the same size
+    target_size = mask.shape[-2:]
+    # Add batch dimension if missing
+    if img.dim() == 3:
+        img = img.unsqueeze(0)
+    if img.shape[-2:] != target_size:
+        img = F.interpolate(img, size=target_size, mode='bilinear', align_corners=False)
+    if img.shape[0] == 1:
+        img = img.squeeze(0)
     if background is None:
         background = torch.zeros_like(img)
-        
+    else:
+        if background.dim() == 3:
+            background = background.unsqueeze(0)
+        if background.shape[-2:] != target_size:
+            background = F.interpolate(background, size=target_size, mode='bilinear', align_corners=False)
+        if background.shape[0] == 1:
+            background = background.squeeze(0)
     return img * mask + background * (1 - mask)
     
 def make_X_dict(

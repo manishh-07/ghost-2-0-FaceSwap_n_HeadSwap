@@ -10,7 +10,7 @@ import torchvision
 from typing import Optional
 from glob import glob
 from collections import defaultdict
-
+from PIL import Image
 from repos.emoca.gdl.datasets.ImageDatasetHelpers import bbox2point
 from src.utils.crops import emoca_crop
 
@@ -40,8 +40,7 @@ class Voxceleb2H5Dataset(torch.utils.data.Dataset):
         self.valid_idxs = []
         self.samples_cnt = samples_cnt
         
-        self.h5_paths = sorted(glob(f'{root_path}/*/*/*.h5'))
-            
+        self.h5_paths = sorted(glob(f'{root_path}/*.h5'))            
         if shuffle:
             rng = random.Random(46)
             rng.shuffle(self.h5_paths)
@@ -81,9 +80,10 @@ class Voxceleb2H5Dataset(torch.utils.data.Dataset):
             self.h5_dict_tree[id][ref][h5_file] = {'idx': len(self.valid_idxs), 'seg_len': seg_len}
             self.valid_idxs.append(idx)
     
+
     def get_sequence(self, video_tensor, is_flip=False):
         result = torch.stack([
-            self.transform(img) if i == (video_tensor.shape[0] - 1) else self.to_tensor(img)
+            self.transform(Image.fromarray(img)) if i == (video_tensor.shape[0] - 1) else self.to_tensor(Image.fromarray(img))
             for i, img in enumerate(video_tensor[:])
         ])
         return result
@@ -119,11 +119,16 @@ class Voxceleb2H5Dataset(torch.utils.data.Dataset):
             face_arc = f['face_arc'][idxs][permutation]
             face_wide = f['face_wide'][idxs][permutation]
         
-            if self.return_masks:
-                face_wide_mask = torch.stack([TF.to_tensor(x) for x in f['face_wide_mask'][idxs][permutation]]) 
-                
-            segmentation = torch.stack([TF.to_tensor(x) for x in f['face_wide_parsing_segformer_B5_ce'][idxs][permutation]])
             
+            if self.return_masks:
+                face_wide_mask = torch.stack([
+                    self.transform(Image.fromarray(x)) for x in f['face_wide_mask'][idxs][permutation]
+                ])
+                
+            segmentation = torch.stack([
+                self.transform(Image.fromarray(x)) for x in f['face_wide_parsing_segformer_B5_ce'][idxs][permutation]
+            ])      
+
             try:
                 face_keypoints = f['keypoints_68'][idxs][permutation]
             except Exception as e:
@@ -147,13 +152,12 @@ class Voxceleb2H5Dataset(torch.utils.data.Dataset):
                 face_wide = np.vstack([face_wide, f_target['face_wide'][idxs_target]])
             
                 if self.return_masks:
-                    
-                    face_wide_mask_target = TF.to_tensor(f_target['face_wide_mask'][idxs_target][0]).unsqueeze(0)
+                    face_wide_mask_target = self.transform(Image.fromarray(f_target['face_wide_mask'][idxs_target][0])).unsqueeze(0)
                     face_wide_mask = torch.cat([face_wide_mask, face_wide_mask_target], 0)
-                    
-                segmentation_target =  TF.to_tensor(f_target['face_wide_parsing_segformer_B5_ce'][idxs_target][0]).unsqueeze(0)
+
+                segmentation_target = self.transform(Image.fromarray(f_target['face_wide_parsing_segformer_B5_ce'][idxs_target][0])).unsqueeze(0)
                 segmentation = torch.cat([segmentation, segmentation_target], 0)
-                
+
                 try:
                     face_keypoints_target = f_target['keypoints_68'][idxs_target]
                 except Exception as e:
@@ -194,5 +198,9 @@ class Voxceleb2H5Dataset(torch.utils.data.Dataset):
     def __len__(self):
         dataset_len = len(self.valid_idxs)
         if self.samples_cnt is not None:
-            dataset_len = min(dataset_len, self.samples_cnt)
+            try:
+                samples_cnt = int(self.samples_cnt)
+                dataset_len = min(dataset_len, samples_cnt)
+            except Exception:
+                pass
         return dataset_len

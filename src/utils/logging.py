@@ -3,7 +3,7 @@ import numpy as np
 import lightning.pytorch as pl
 from lightning.pytorch.callbacks import ModelCheckpoint
 from .preprocess import make_X_dict
-
+import cv2
 class PeriodicCheckpoint(ModelCheckpoint):
     def __init__(self, every: int, dir: str):
         super().__init__()
@@ -29,19 +29,28 @@ class LogPredictionSamplesCallback(pl.Callback):
         self.n = n
         self.log_train_freq = log_train_freq
     
+    import cv2
+
     def plot_images(self, pl_module, outputs, batch, mode=None): 
-  
         X_dict = make_X_dict(
-                    batch['face_arc'].detach(),
-                    batch['face_wide'].detach(),
-                    batch['face_wide_mask'].detach() 
-                )
+            batch['face_arc'].detach(),
+            batch['face_wide'].detach(),
+            batch['face_wide_mask'].detach() 
+        )
+
+        def resize_img(img, size=(112, 112)):
+            # img shape: (C, H, W) or (H, W, C)
+            if img.shape[0] in [1, 3]:  # (C, H, W)
+                img = np.transpose(img, (1, 2, 0))
+            img = cv2.resize(img, size, interpolation=cv2.INTER_AREA)
+            if img.shape[2] == 1:
+                img = np.repeat(img, 3, axis=2)
+            return np.transpose(img, (2, 0, 1))  # back to (C, H, W)
 
         if mode is None:
             columns = ['source', 'target', 'fake', 'mask'] 
             data = [
-                list(map(lambda x: ((x.cpu().detach().numpy() + 1) / 2 * 255).astype(np.uint8), (x, y, z, k)))
-    
+                list(map(lambda x: resize_img(((x.cpu().detach().numpy() + 1) / 2 * 255).astype(np.uint8)), (x, y, z, k)))
                 for x, y, z, k in zip(
                     X_dict['source']['face_wide'][:self.n, 0],
                     X_dict['target']['face_wide'][:self.n],

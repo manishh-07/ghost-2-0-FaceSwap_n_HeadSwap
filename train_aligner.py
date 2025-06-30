@@ -269,8 +269,15 @@ class AlignerModule(pl.LightningModule):
             lpips_val = self.lpips(masked_output,  X_dict['target']['face_wide'])
             psnr_val = self.psnr(masked_output,  X_dict['target']['face_wide'])
             ssim_val = self.ssim(masked_output,  X_dict['target']['face_wide'])
-            mssim_val = self.mssim(masked_output,  X_dict['target']['face_wide'])
-
+            # Upsample to 160x160 for MS-SSIM
+            def upsample_to_160(img):
+                if img.shape[-1] < 160 or img.shape[-2] < 160:
+                    img = F.interpolate(img, size=(160, 160), mode='bilinear', align_corners=False)
+                return img
+            mssim_val = self.mssim(
+                upsample_to_160(masked_output),
+                upsample_to_160(X_dict['target']['face_wide'])
+            )
             id_dict = self.aligner_loss.id_loss(outputs, X_dict, return_embeds=True)
             id_metric = F.cosine_similarity(id_dict['fake_embeds'], id_dict['real_embeds']).mean()
 

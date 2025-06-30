@@ -34,8 +34,6 @@ MANIFEST
 
 # Installer logs
 pip-log.txt
-pip-delete-this-directory.txt
-
 # Unit test / coverage reports
 htmlcov/
 .tox/
@@ -176,6 +174,5 @@ ts_logs_aligner/
 repos/
 aligner_checkpoints/
 src/losses/gaze_models/
-*.png
 blender_checkpoints/
 

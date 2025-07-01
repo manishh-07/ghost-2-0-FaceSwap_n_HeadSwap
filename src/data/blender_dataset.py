@@ -18,7 +18,7 @@ from src.blender.utils import (
 
 
 class BlenderDataset(Voxceleb2H5Dataset):
-     def __init__(
+    def __init__(
         self,
         root_path: str,
         source_transform=None,
@@ -57,7 +57,7 @@ class BlenderDataset(Voxceleb2H5Dataset):
         
             
     
-     def __getitem__(self, idx):
+    def __getitem__(self, idx):
         h5_path = self.h5_paths[self.valid_idxs[idx]]
         
         with h5py.File(h5_path) as f:
@@ -70,6 +70,10 @@ class BlenderDataset(Voxceleb2H5Dataset):
             
             face_wide = f['face_wide'][start_frame]
             mask_source = torch.tensor(f['face_wide_parsing_segformer_B5_ce'][start_frame])
+            if mask_source.ndim == 3 and mask_source.shape[-1] == 3:
+                # Convert HWC to CHW and take only the first channel
+                mask_source = mask_source.permute(2, 0, 1)[0:1, :, :]
+
             face_orig = self.to_tensor(face_wide)
             face_target = face_orig
             mask_target = mask_source
@@ -98,8 +102,11 @@ class BlenderDataset(Voxceleb2H5Dataset):
             
             
             face_side = self.source_transform(f['face_wide'][side_frame])
+
             mask_side = torch.tensor(f['face_wide_parsing_segformer_B5_ce'][side_frame])
-            
+            if mask_side.ndim == 3 and mask_side.shape[-1] == 3:
+                mask_side = mask_side.permute(2, 0, 1)[0:1, :, :]
+
             if self.swap_mode == "face":
                 # Only prepare face swap data
                 # (e.g., set mask_side = mask_target, face_side = face_target)
@@ -129,7 +136,9 @@ class BlenderDataset(Voxceleb2H5Dataset):
                 face_side = make_affine_augmentation(face_side[None, ...], params)[0]
                 mask_side = make_affine_augmentation(mask_side[None, None, :, :], params)[0, 0, :, :]
             
-
+        print("mask_source shape:", mask_source.shape)
+        print("mask_target shape:", mask_target.shape)
+        print("mask_side shape:", mask_side.shape)
             
         if mask_source.ndim == 2:
             mask_source = mask_source[None, ...]
@@ -137,7 +146,7 @@ class BlenderDataset(Voxceleb2H5Dataset):
             mask_target = mask_target[None, ...]
         if mask_side.ndim == 2:
             mask_side = mask_side[None, ...]
-
+      
         mask_source_noise = make_composed_random_irregular_mask(mask_source)
         mask_target_noise = make_composed_random_irregular_mask(mask_target)
         mask_side_noise = make_composed_random_irregular_mask(mask_side)
@@ -171,7 +180,7 @@ class BlenderDataset(Voxceleb2H5Dataset):
             'mask_side_noise': mask_side_noise,
         }
 
-     def __len__(self):
+    def __len__(self):
         dataset_len = len(self.valid_idxs)
         if self.samples_cnt is not None:
             dataset_len = min(dataset_len, self.samples_cnt)

@@ -8,6 +8,12 @@ from enum import Enum
 
 
 def encode_face_segmentation(segmentation):
+    # Ensure input is 2D (H, W)
+    if isinstance(segmentation, torch.Tensor):
+        segmentation = segmentation.cpu().numpy()
+    if segmentation.ndim == 3:
+        segmentation = segmentation[0]  # Take the first channel
+
     parse = segmentation
     face_part_ids = [2,3,4,5,6,7,8,9,10,11,12,14,15,16,17,18,19,20]
     face_map = np.zeros([parse.shape[0], parse.shape[1]], dtype=np.uint8)

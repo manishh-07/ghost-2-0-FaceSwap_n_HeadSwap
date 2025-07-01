@@ -260,27 +260,35 @@ class BlenderLogPredictionSamplesCallback(pl.Callback):
         
         samples = []
 
-        batch_size = outputs['face_orig'].shape[0]
+        batch_size = outputs['oup'].shape[0]
+
+        print("outputs keys:", outputs.keys())
+        print("batch_size:", outputs['oup'].shape[0])
+
         for i in range(min(batch_size, self.n)):
-            sample = [
-                [
-                    self.img_to_bgr(outputs, 'face_orig', i), self.img_to_bgr(outputs, 'face_source', i),
-                    self.img_to_bgr(outputs, 'face_target', i), self.img_to_bgr(outputs, 'gen_h', i),
-                    self.mask_to_bgr(outputs, 'M_Ah', i, scale=1., cmap='gray'), self.img_to_bgr(outputs, 'I_ag', i),
-                    self.img_to_bgr(outputs, 'oup', i)
-                ],
-
-
-                [
-                    self.mask_to_bgr(outputs, 'mask_source', i), self.img_to_bgr(outputs, 'gray_source', i),
-                    self.mask_to_bgr(outputs, 'mask_target', i), self.img_to_bgr(outputs, 'gen_i', i),
-                    self.mask_to_bgr(outputs, 'M_Ai', i, scale=1., cmap='gray'), self.img_to_bgr(outputs, 'I_tb', i),
-                    self.create_template()
+            try:
+                row = [
+                    self.img_to_bgr(outputs, 'oup', i),
+                    self.img_to_bgr(outputs, 'gen_h', i),
+                    self.img_to_bgr(outputs, 'gen_i', i),
+                    self.mask_to_bgr(outputs, 'M_Ah', i, scale=1, cmap='gray'),
+                    self.mask_to_bgr(outputs, 'M_Ai', i, scale=1, cmap='gray'),
+                    self.img_to_bgr(outputs, 'I_tb', i),
+                    self.img_to_bgr(outputs, 'I_ag', i)
                 ]
-            ]
-                
-            sample = np.concatenate([np.concatenate(row, axis=1) for row in sample], axis=0)
-            samples.append(sample)
+                # Resize all images in the row to the same height and width
+                heights = [img.shape[0] for img in row]
+                widths = [img.shape[1] for img in row]
+                min_height = min(heights)
+                min_width = min(widths)
+                for idx, img in enumerate(row):
+                    if img.shape[0] != min_height or img.shape[1] != min_width:
+                        row[idx] = cv2.resize(img, (min_width, min_height), interpolation=cv2.INTER_NEAREST)
+                # Concatenate the row into a single image
+                sample_img = np.concatenate(row, axis=1)
+                samples.append(sample_img)
+            except Exception as e:
+                print(f"Error in create_grids for i={i}: {e}")
         
         sample_shape = samples[0].shape
         border = np.full((16, sample_shape[1], 3), 1).astype(np.float32)
@@ -356,7 +364,8 @@ if __name__ == '__main__':
         max_epochs=cfg.train_options.max_epochs,
         accelerator='gpu', devices=cfg.num_gpus,
         log_every_n_steps=cfg.train_options.log_train_freq,
-        val_check_interval=cfg.train_options.log_interval,
+        check_val_every_n_epoch=1,  # <-- add this
+        # val_check_interval=cfg.train_options.log_interval,  # <-- remove or comment out this line
         logger=wandb_logger, callbacks=[
             log_pred_callback, pl.callbacks.ModelCheckpoint(
                 save_last=cfg.train_options.save_last,

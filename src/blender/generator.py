@@ -59,13 +59,15 @@ class BlenderGenerator(nn.Module):
             self.RCNet(fA,fT,M_a,M_t,I_t,M_a_noise,M_t_noise, I_gray, I_a, old_version=old_version, copy_source_attrb=copy_source_attrb)
         
         M_Ah,M_Ad,M_Td,M_Ai,M_Ti,M_Ar,M_Tr = mask_list
-        
+
+        target_size = I_t.shape[-2:]
+        gen_h = F.interpolate(gen_h, size=target_size, mode='bilinear', align_corners=True)
+        gen_i = F.interpolate(gen_i, size=target_size, mode='bilinear', align_corners=True)
         gen_total = gen_h + gen_i
+
         I_gd = F.interpolate(I_gray * M_Td, size=gen_total.shape[-2:], mode='bilinear', align_corners=True)
         
-        gen_h = F.interpolate(gen_h,size=I_t.shape[-2:],mode='bilinear',align_corners=True)
-        gen_i = F.interpolate(gen_i,size=I_t.shape[-2:],mode='bilinear',align_corners=True)
-
+        
         
 
         if cycle:
@@ -80,11 +82,17 @@ class BlenderGenerator(nn.Module):
             I_td = F.interpolate(I_td, size=cycle_gen.shape[-2:],mode='bilinear')
             return cycle_gen, I_td
 
-        I_tb = gt * (1-M_Ad)
+        if M_Ad.dim() == 4 and M_Ad.shape[1] > 1:
+            M_Ad = M_Ad.sum(dim=1, keepdim=True)
+        I_tb = gt * (1 - M_Ad)
+
         I_ag = I_gray * M_Ah
         if inpainter is not None:
             gen_i = inpainter(gen_h, I_tb, M_Ai, M_Ah, I_a)
         else:
+            # Ensure M_Ai is single-channel for broadcasting
+            if M_Ai.dim() == 4 and M_Ai.shape[1] > 1:
+                M_Ai = M_Ai.sum(dim=1, keepdim=True)
             gen_i = I_t * M_Ai
         
         M_Ah = self.get_mask(M_a,self.head_index)
@@ -92,6 +100,15 @@ class BlenderGenerator(nn.Module):
         M_sum = M_Ah + M_Th + (0 if M_a_noise is None else M_a_noise) + (0 if M_t_noise is None else M_t_noise)
         M_Ai,M_Ad = self.get_inpainting(M_sum,M_Ah)
         
+        def ensure_single_channel(x):
+            if x.dim() == 4 and x.shape[1] > 1:
+                return x.sum(dim=1, keepdim=True)
+            return x
+
+        M_Ah = ensure_single_channel(M_Ah)
+        M_Ai = ensure_single_channel(M_Ai)
+        I_ag = ensure_single_channel(I_ag)
+
         inp = torch.cat([gen_h,gen_i,
                          M_Ah,
                          I_tb,M_Ai,I_ag],1)
@@ -465,25 +482,36 @@ class BlenderGenerator(nn.Module):
         return (x-x_mean) / x_norm
     
     def transform_fX(self, fX, M_X_resize, I_X_resize=None):
-        batch,channel,h,w = fX.shape
-        
-        nonzeros_cnt_X = (M_X_resize == 1).sum(dim=(1, 2, 3))
-        max_nonzeros_cnt_X = nonzeros_cnt_X.max().item()
-        fXr_mask = (
-            torch.arange(max_nonzeros_cnt_X, device=fX.device)[None, :] < nonzeros_cnt_X[:, None]
-        )
+        batch, channel, h, w = fX.shape
 
-        fXr = torch.zeros(batch, channel, max_nonzeros_cnt_X, dtype=fX.dtype, device=fX.device).masked_scatter(
-            fXr_mask[:, None, :], fX.masked_select(M_X_resize == 1)
-        )
+        # Flatten spatial dims for easier indexing
+        fX_flat = fX.view(batch, channel, -1)
+        mask_flat = M_X_resize.view(batch, -1)
+
+        nonzeros_cnt_X = mask_flat.sum(dim=1).long()
+        max_nonzeros_cnt_X = nonzeros_cnt_X.max().item()
+
+        # Prepare output tensors
+        fXr = torch.zeros(batch, channel, max_nonzeros_cnt_X, dtype=fX.dtype, device=fX.device)
+        fXr_mask = torch.zeros(batch, max_nonzeros_cnt_X, dtype=torch.bool, device=fX.device)
 
         if I_X_resize is not None:
-            ref = torch.zeros(batch, I_X_resize.shape[1], max_nonzeros_cnt_X, dtype=fX.dtype, device=fX.device).masked_scatter(
-                fXr_mask[:, None, :], I_X_resize.masked_select(M_X_resize == 1).to(fX.dtype)
-            )
+            I_X_flat = I_X_resize.view(batch, I_X_resize.shape[1], -1)
+            ref = torch.zeros(batch, I_X_resize.shape[1], max_nonzeros_cnt_X, dtype=fX.dtype, device=fX.device)
+        else:
+            ref = None
 
+        for b in range(batch):
+            idx = mask_flat[b].nonzero(as_tuple=False).squeeze(1)
+            n = idx.numel()
+            if n > 0:
+                fXr[b, :, :n] = fX_flat[b, :, idx]
+                fXr_mask[b, :n] = True
+                if I_X_resize is not None:
+                    ref[b, :, :n] = I_X_flat[b, :, idx]
+
+        if I_X_resize is not None:
             return fXr, fXr_mask, ref
-
         return fXr, fXr_mask
 
     def compute_corre_and_masks(self, fA, fT, M_A, M_T, I_t):
@@ -510,6 +538,14 @@ class BlenderGenerator(nn.Module):
         if gen is None:
             gen = torch.zeros((batch,3,h,w), device=matrix.device, dtype=matrix.dtype)
 
+        if ref.shape[-1] == 0:
+            return gen
+        
+        if gen.shape[-2:] != M_A_resize.shape[-2:]:
+            M_A_resize = F.interpolate(M_A_resize, size=gen.shape[-2:], mode='nearest')
+            ref = F.interpolate(ref, size=gen.shape[-2:], mode='bilinear', align_corners=True)
+            fAr_mask = F.interpolate(fAr_mask.float().unsqueeze(1), size=gen.shape[-2:], mode='nearest').bool().squeeze(1)
+
         f_WTA = matrix / self.temperature
 
         neg_inf = -(10 ** 4) # float('-inf')
@@ -520,6 +556,16 @@ class BlenderGenerator(nn.Module):
         ref = torch.matmul(ref, f.permute(0, 2, 1)) # [b, 3, hT] x [b, hT, hA] = [b, 3, hA]
 
         gen = gen.to(ref.dtype)
+
+        # --- DEBUG PRINTS: Place here ---
+        print("gen.shape:", gen.shape)
+        print("M_A_resize.shape:", M_A_resize.shape)
+        print("ref.shape:", ref.shape)
+        print("fAr_mask.shape:", fAr_mask.shape)
+        print("mask (M_A_resize==1) count:", (M_A_resize == 1).sum().item())
+        print("ref.masked_select count:", fAr_mask[:, None, :].expand_as(ref).sum().item())
+        print("ref.masked_select shape:", ref.masked_select(fAr_mask[:, None, :].expand_as(ref)).shape)
+        # --- END DEBUG PRINTS ---
                 
         gen = gen.masked_scatter(
             M_A_resize == 1,

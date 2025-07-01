@@ -1,4 +1,4 @@
-home_dir: '/home/jovyan/yaschenko/clean_headswap/'
+home_dir: '/content/ghost-2-0-FaceSwap_n_HeadSwap/aligner_checkpoints'
 experiment_name: 'test_run'
 # num_gpus: 8
 num_gpus: 1
@@ -64,7 +64,7 @@ train_options:
     samples_cnt: null
     source_len: 1
     shuffle: True
-    num_workers: 40
+    num_workers: 2
 
         
 inference_options:
@@ -75,4 +75,4 @@ inference_options:
     source_len: 1
     shuffle: False
     swap_mode: both
-    num_workers: 40
+    num_workers: 2

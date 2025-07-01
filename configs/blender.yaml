@@ -1,4 +1,4 @@
-home_dir: './exps'
+home_dir: '/content/ghost-2-0-FaceSwap_n_HeadSwap/blender_checkpoints'
 experiment_name: 'test_run'
 # num_gpus: 8
 num_gpus: 1
@@ -38,7 +38,7 @@ train_options:
     subset_size: null
     
     batch_size: 20
-    num_workers: 40
+    num_workers: 2
 
         
 inference_options:
@@ -51,4 +51,4 @@ inference_options:
     subset_size: 100
     swap_mode: both    
     batch_size: 2
-    num_workers: 1
+    num_workers: 2

@@ -86,7 +86,7 @@ def crop_face(image_full: np.ndarray, kps, crop_size=112) -> np.ndarray:
     align_img = cv2.warpAffine(image_full, M, (crop_size, crop_size), borderValue=0.0)         
     return align_img
 
-def tight_crop_face(image_full: np.ndarray, kps, crop_size=224, return_M=False):
+def tight_crop_face(image_full: np.ndarray, kps, crop_size=112, return_M=False):
     """
     Crop only the tight face region from the image using 5 landmarks.
     This is a tighter crop than wide_crop_face, suitable for face-only swapping.
@@ -97,11 +97,11 @@ def tight_crop_face(image_full: np.ndarray, kps, crop_size=224, return_M=False):
         return align_img, M
     return align_img
 
-def wide_crop_face(image_full: np.ndarray, kps, crop_size=512, return_M=False):
+def wide_crop_face(image_full: np.ndarray, kps, crop_size=112, return_M=False):
     """
     Crop face from image and resize
     """
-    M, _ = estimate_norm(kps, crop_size, mode ='None', wide=True)
+    M, _ = estimate_norm(kps, crop_size, mode='arcface', wide=False)
     align_img = cv2.warpAffine(image_full, M, (crop_size, crop_size), borderValue=0.0)
     
     if return_M:

@@ -30,12 +30,11 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s %(levelname)s %(message)s',
     handlers=[
-        logging.FileHandler("aligner_train.log"),
+        logging.FileHandler("blender_train.log"),
         logging.StreamHandler(sys.stdout)
-    ]
+    ],
+    force=True  # <--- Add this!
 )
-
-
 class BlenderLoss(nn.Module):
     def __init__(self, disc, w_perc_vgg=1e-2, w_rec=30, w_cycle=1, w_adv=1, w_reg=1):
         super(BlenderLoss, self).__init__()

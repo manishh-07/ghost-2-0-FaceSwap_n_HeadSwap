@@ -31,7 +31,8 @@ logging.basicConfig(
     handlers=[
         logging.FileHandler("aligner_train.log"),
         logging.StreamHandler(sys.stdout)
-    ]
+    ],
+    force=True  # <--- Add this!
 )
 
     
@@ -223,7 +224,8 @@ class AlignerModule(pl.LightningModule):
         return batch
     
     def on_train_epoch_start(self):
-        logging.info(f"\n=== Starting training epoch {self.current_epoch} ===")
+        max_epochs = self.trainer.max_epochs if hasattr(self, "trainer") else "?"
+        logging.info(f"\n=== Starting training epoch {self.current_epoch} / {max_epochs - 1} ===")
 
     def on_train_epoch_end(self):
         logging.info(f"=== Finished training epoch {self.current_epoch} ===")
